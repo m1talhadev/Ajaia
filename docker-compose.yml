@@ -1,0 +1,13 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ajaia
+      POSTGRES_PASSWORD: ajaia
+      POSTGRES_DB: ajaia_docs
+    ports:
+      - "5433:5432"
+    volumes:
+      - ajaia-docs-pg:/var/lib/postgresql/data
+volumes:
+  ajaia-docs-pg:

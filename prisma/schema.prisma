@@ -1,0 +1,104 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String          @id @default(cuid())
+  email     String          @unique
+  name      String
+  documents Document[]
+  edited    Document[]      @relation("LastEditedBy")
+  shares    DocumentShare[]
+  comments  Comment[]
+  createdAt DateTime        @default(now())
+}
+
+model Document {
+  id              String          @id @default(cuid())
+  title           String
+  // Editor output as HTML; only ever rendered through the TipTap schema.
+  content         String          @default("")
+  // Google Docs–style "General access": who besides the people added can open
+  // the document via its link, and with which role.
+  linkAccess      LinkAccess      @default(restricted)
+  linkRole        ShareRole       @default(viewer)
+  // Share settings (Google Docs gear menu); both default to on, as in Google Docs.
+  editorsCanShare Boolean         @default(true)
+  viewersCanCopy  Boolean         @default(true)
+  owner           User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId         String
+  // Bumped on every title/content save. Saves must name the revision they were
+  // based on, so a stale tab can't silently overwrite someone else's edit.
+  revision        Int             @default(0)
+  lastEditedBy    User?           @relation("LastEditedBy", fields: [lastEditedById], references: [id], onDelete: SetNull)
+  lastEditedById  String?
+  shares          DocumentShare[]
+  images          Image[]
+  comments        Comment[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([ownerId])
+}
+
+enum LinkAccess {
+  restricted
+  anyone
+}
+
+enum ShareRole {
+  viewer
+  commenter
+  editor
+}
+
+model DocumentShare {
+  id         String    @id @default(cuid())
+  document   Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  role       ShareRole @default(editor)
+  createdAt  DateTime  @default(now())
+
+  @@unique([documentId, userId])
+  @@index([userId])
+}
+
+// Images embedded in a document. Stored in Postgres so the deployment needs no
+// separate object store; served through an access-checked route.
+model Image {
+  id         String   @id @default(cuid())
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId String
+  mimeType   String
+  size       Int
+  data       Bytes
+  createdAt  DateTime @default(now())
+
+  @@index([documentId])
+}
+
+// Comment threads. A thread is anchored to the text it was made on (`quote`),
+// so commenters can comment without editing the document itself.
+model Comment {
+  id         String    @id @default(cuid())
+  document   Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId String
+  author     User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId   String
+  parent     Comment?  @relation("Replies", fields: [parentId], references: [id], onDelete: Cascade)
+  parentId   String?
+  replies    Comment[] @relation("Replies")
+  quote      String    @default("")
+  body       String
+  resolved   Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+
+  @@index([documentId])
+}
